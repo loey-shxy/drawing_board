@@ -220,7 +220,7 @@ const addImageToCanvas = async (imageUrl: string) => {
 const handleSimulateApiCall = () => {
   if (!excalidrawAPI) return;
 
-  const mockUrl = 'https://img.alicdn.com/tfs/TB13.bA.q6qK1RjSZFmXXX0PFXa-1152-192.png'; 
+  const mockUrl = 'https://img1.baidu.com/it/u=735786508,893164903&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=500'; 
 
   // --------------------------------------------------
   // 【关键修改 2】检查画布中是否已经存在该图片
