@@ -6,11 +6,7 @@ export default function (props: any) {
     console.log(props)
     return (
         <Excalidraw 
-        // 1. 显式传递属性 (安全隔离)
-            initialData={props.initialData}
-            onChange={props.ropsonChange}
-            excalidrawAPI={props.excalidrawAPI}
-            langCode={props.langCode || "zh-TW"} // 如果 props 没传，默认中文
+            {...props}
         >
             <MainMenu>
                 <MainMenu.DefaultItems.LoadScene />
