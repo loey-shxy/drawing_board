@@ -2,23 +2,26 @@
 import { nextTick } from 'vue';
 import { nanoid } from 'nanoid';
 import { applyPureReactInVue } from 'veaury';
-import { Excalidraw } from '@excalidraw/excalidraw';
 import { debounce } from 'lodash-es';
 import type { 
   ExcalidrawImperativeAPI, 
-  ExcalidrawImageElement, 
   BinaryFileData,
-  ExcalidrawElement
-} from '@excalidraw/excalidraw/types/types';
+  AppState,
+  BinaryFiles,
+} from '@excalidraw/excalidraw/types';
+import type { 
+  ExcalidrawElement,
+} from '@excalidraw/excalidraw/element/types';
+import ExcalidrawWrapper from './react_app/ExcalidrawWrapper'; 
 
-const ExcalidrawComponent = applyPureReactInVue(Excalidraw);
+const ExcalidrawComponent = applyPureReactInVue(ExcalidrawWrapper);
 
 let excalidrawAPI: ExcalidrawImperativeAPI | null = null;
 
 const STORAGE_KEYS = {
-  ELEMENTS: 'excalidraw',           
-  STATE: 'excalidraw-state',        
-  FILES: 'excalidraw-files'         
+  ELEMENTS: 'excalidraw',        // 存数组：[ {type: "image", fileId: "..."} ]
+  FILES: 'excalidraw-files',     // 存数据：{ "fileId": { dataURL: "..." } }
+  STATE: 'excalidraw-state'      // 存配置     
 };
 
 const onReady = async (api: ExcalidrawImperativeAPI) => {
@@ -42,38 +45,50 @@ const loadInitialData = () => {
   };
 
   try {
+    // 1. 读取 Elements (官网结构：数组)
     const savedElements = localStorage.getItem(STORAGE_KEYS.ELEMENTS);
-    if (savedElements) result.elements = JSON.parse(savedElements);
-
-    const savedState = localStorage.getItem(STORAGE_KEYS.STATE);
-    if (savedState) {
-      const parsedState = JSON.parse(savedState);
-      result.appState = { ...result.appState, ...parsedState };
-      result.scrollToContent = false; 
-    } else {
-        result.scrollToContent = true;
+    if (savedElements) {
+      const parsed = JSON.parse(savedElements);
+      if (Array.isArray(parsed)) {
+        result.elements = parsed;
+      }
     }
 
+    // 2. 读取 Files (真正的图片数据在这里)
     const savedFiles = localStorage.getItem(STORAGE_KEYS.FILES);
-    if (savedFiles) result.files = JSON.parse(savedFiles);
+    if (savedFiles) {
+      result.files = JSON.parse(savedFiles);
+    }
 
-    console.log('✅ 已恢复历史数据');
+    // 3. 读取 State
+    const savedState = localStorage.getItem(STORAGE_KEYS.STATE);
+    if (savedState) {
+      result.appState = { ...result.appState, ...JSON.parse(savedState) };
+      result.scrollToContent = false;
+    } else {
+      result.scrollToContent = true;
+    }
+
+    console.log('✅ 历史数据已恢复');
   } catch (e) {
-    console.error('❌ 读取本地数据失败:', e);
+    console.error('❌ 读取失败:', e);
   }
 
   return result;
 };
 
+
 const initialData = loadInitialData();
 
-// ------------------------------------------------------------------
-// 保存逻辑
-// ------------------------------------------------------------------
 const saveToStorage = debounce((elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
   try {
-    localStorage.setItem(STORAGE_KEYS.ELEMENTS, JSON.stringify(elements));
+    // 过滤掉所有 isDeleted 为 true 的元素
+    const cleanElements = elements.filter(el => !el.isDeleted);
     
+    // 保存清洗后的数组
+    localStorage.setItem(STORAGE_KEYS.ELEMENTS, JSON.stringify(cleanElements));
+
+    // 保存 State
     const stateToSave = {
       showWelcomeScreen: false,
       theme: appState.theme,
@@ -88,14 +103,34 @@ const saveToStorage = debounce((elements: readonly ExcalidrawElement[], appState
     localStorage.setItem(STORAGE_KEYS.STATE, JSON.stringify(stateToSave));
 
     if (files && Object.keys(files).length > 0) {
-        localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(files));
-    }
+        
+        const activeFileIds = new Set<string>();
+        cleanElements.forEach((el) => {
+            if (el.type === "image" && el.fileId) {
+                activeFileIds.add(el.fileId);
+            }
+        });
 
-    console.log('💾 自动保存成功');
+        const cleanFiles: BinaryFiles = {};
+        Object.keys(files).forEach((fileId) => {
+            if (activeFileIds.has(fileId)) {
+                cleanFiles[fileId] = files[fileId];
+            }
+        });
+
+        if (Object.keys(cleanFiles).length > 0) {
+            localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(cleanFiles));
+        } else {
+            localStorage.removeItem(STORAGE_KEYS.FILES);
+        }
+    } else {
+        localStorage.removeItem(STORAGE_KEYS.FILES);
+    }
+    
   } catch (e) {
     console.error('❌ 保存失败:', e);
   }
-}, 1000);
+}, 500);
 
 const handleChange = (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
   saveToStorage(elements, appState, files);
@@ -110,7 +145,9 @@ const fetchImageToDataURL = async (url: string) => {
     if (!res.ok) throw new Error(`网络请求失败: ${res.statusText}`);
     const blob = await res.blob();
     
+    console.log('blob', blob)
     let mimeType = blob.type;
+    console.log('mimeType', mimeType)
     if (!mimeType || mimeType === 'application/octet-stream') {
         const ext = url.split('.').pop()?.split('?')[0].toLowerCase();
         if (ext === 'png') mimeType = 'image/png';
@@ -156,10 +193,10 @@ const addImageToCanvas = async (imageUrl: string) => {
       lastRetrieved: Date.now(),
     };
 
-    const rawImageElement: ExcalidrawImageElement = {
+    const rawImageElement: any = {
       type: "image",
       id: nanoid(),
-      fileId: fileId,
+      fileId,
       status: "saved",
       x: 100, y: 100,
       width: imageData.width,
@@ -184,10 +221,6 @@ const addImageToCanvas = async (imageUrl: string) => {
       link: null,
       locked: false,
       scale: [1, 1],
-      // --------------------------------------------------
-      // 【关键修改 1】将原始 URL 存入 customData
-      // 这样我们以后就能知道这个元素对应哪个 URL
-      // --------------------------------------------------
       customData: {
         sourceUrl: imageUrl 
       }
@@ -222,9 +255,7 @@ const handleSimulateApiCall = () => {
 
   const mockUrl = 'https://img1.baidu.com/it/u=735786508,893164903&fm=253&fmt=auto&app=138&f=JPEG?w=500&h=500'; 
 
-  // --------------------------------------------------
-  // 【关键修改 2】检查画布中是否已经存在该图片
-  // --------------------------------------------------
+  // 检查画布中是否已经存在该图片
   const currentElements = excalidrawAPI.getSceneElements();
   
   // 查找是否有任意一个元素的 customData.sourceUrl 等于我们要加的 mockUrl
@@ -252,6 +283,7 @@ const handleSimulateApiCall = () => {
       :excalidrawAPI="onReady" 
       :initialData="initialData"
       :onChange="handleChange"
+      langCode="zh-TW" 
     />
   </div>
 </template>
