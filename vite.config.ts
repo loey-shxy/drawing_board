@@ -11,4 +11,7 @@ export default defineConfig({
   define: {
     'process.env.IS_PREACT': JSON.stringify('true'),
   },
+  server: {
+    port: 5000
+  }
 })
