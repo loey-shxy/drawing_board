@@ -276,8 +276,41 @@ const handleChange = (elements: readonly ExcalidrawElement[], appState: AppState
 </script>
 
 <template>
-  <div style="width: 100%; height: 100vh">
+  <div class="excalidraw-wrapper" style="width: 100%; height: 100vh">
     <ExcalidrawComponent :excalidrawAPI="onReady" :initialData="initialData" :onChange="handleChange"
       langCode="zh-TW" />
   </div>
 </template>
+
+<style lang="scss">
+.excalidraw-wrapper {
+  .shapes-section {
+    position: absolute;
+    top: 50px;
+    .Stack_horizontal {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .App-toolbar__divider {
+      height: 1px;
+      width: 1.5rem;
+    }
+  }
+
+  .App-menu__left {
+    transform: translate(60px, -10px);
+  }
+
+  .HintViewer {
+    position: fixed;
+    top: 10px;
+    left: 0;
+  }
+
+  .sidebar-trigger__label-element {
+    position: fixed;
+    right: 20px;
+  }
+}
+</style>
